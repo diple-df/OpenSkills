@@ -1,4 +1,7 @@
 * text=auto
-*.bat text eol=crlf
-*.cmd text eol=crlf
 *.md text eol=lf
+
+# Batch files are downloaded raw or from the ZIP archive, so keep their
+# CRLF bytes exactly as committed.
+*.bat -text
+*.cmd -text
