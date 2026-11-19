@@ -53,6 +53,12 @@ Installed into `%USERPROFILE%\.config\opencode\skills\<name>`.
 | `modern-web-guidance` | GoogleChrome/modern-web-guidance |
 | `ponytail` | DietrichGebert/ponytail |
 | `ascii-art-diagrams` | jasnell/opencode-skill-ascii-art-diagrams |
+| `karpathy-guidelines` | multica-ai/andrej-karpathy-skills |
+| `reverse-engineer-anything` | morluto/rea |
+| `rea-analysis-optimization` | morluto/rea |
+| `rea-changelog-update` | morluto/rea |
+| `rea-ci-tests-audit` | morluto/rea |
+| `rea-tool-design` | morluto/rea |
 
 Each skill is fetched from the upstream `main` branch, and the installer verifies
 that `SKILL.md` is present before copying it into place.
@@ -60,6 +66,8 @@ that `SKILL.md` is present before copying it into place.
 `modern-web-guidance` runs `npx modern-web-guidance` at query time, so the skill
 body is small but the guides are fetched on demand. `ascii-art-diagrams` needs
 Python 3 for its `scripts/grid.py` and `scripts/verify.py` helpers.
+The `rea-*` skills drive REA's MCP server, so they need REA registered with the
+agent and a native analysis provider for anything beyond static inspection.
 
 ### Instruction packs
 
@@ -67,9 +75,11 @@ Appended to the global `AGENTS.md` as managed blocks that are replaced on every
 run, leaving your own rules untouched:
 
 - Global OpenCode policy (GitHub and remote-action rules, context usage)
-- Andrej Karpathy inspired coding guidelines
-- REA reverse-engineering guidance
 - Non-interactive shell strategy for headless agent sessions
+
+Karpathy guidelines and REA guidance used to be merged into `AGENTS.md`; both
+are now proper skills (`karpathy-guidelines` and the `rea-*` set) that load only
+when relevant instead of sitting in every session's context.
 
 ### Plugins
 

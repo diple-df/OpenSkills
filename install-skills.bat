@@ -75,10 +75,12 @@ call :install_skill typeui-fundamentals           bergside/typeui               
 call :install_skill modern-web-guidance           GoogleChrome/modern-web-guidance skills/modern-web-guidance
 call :install_skill ponytail                      DietrichGebert/ponytail          skills/ponytail
 call :install_skill ascii-art-diagrams            jasnell/opencode-skill-ascii-art-diagrams
-
-rem --- extra instruction packs (merged into AGENTS.md) ---
-call :install_karpathy_instructions
-call :install_rea_instructions
+call :install_skill karpathy-guidelines           multica-ai/andrej-karpathy-skills skills/karpathy-guidelines
+call :install_skill reverse-engineer-anything     morluto/rea                      .agents/skills/reverse-engineer-anything
+call :install_skill rea-analysis-optimization     morluto/rea                      .agents/skills/rea-analysis-optimization
+call :install_skill rea-changelog-update          morluto/rea                      .agents/skills/rea-changelog-update
+call :install_skill rea-ci-tests-audit            morluto/rea                      .agents/skills/rea-ci-tests-audit
+call :install_skill rea-tool-design               morluto/rea                      .agents/skills/rea-tool-design
 
 rem --- plugins ---
 call :install_plugins
@@ -184,50 +186,6 @@ if errorlevel 8 (
 echo   [OK] %SKILL%
 set "INSTALLED=!INSTALLED! %SKILL%"
 exit /b 0
-
-rem ============================================================
-rem :install_karpathy_instructions
-rem   Download Andrej Karpathy inspired guidelines and merge into AGENTS.md
-rem ============================================================
-:install_karpathy_instructions
-setlocal DisableDelayedExpansion
-set "K_URL=https://raw.githubusercontent.com/forrestchang/andrej-karpathy-skills/main/CLAUDE.md"
-set "K_FILE=%WORK%\karpathy-claude.md"
-curl -L -s --fail -o "%K_FILE%" "%K_URL%"
-if errorlevel 1 (
-    echo   [WARN] download failed: andrej-karpathy-skills
-    endlocal & exit /b 0
-)
-
-powershell -NoProfile -Command "$a='%OC_DIR%\AGENTS.md'; $f='%K_FILE%'; $c=if(Test-Path -LiteralPath $a){Get-Content -LiteralPath $a -Raw -Encoding UTF8}else{''}; if($c -match 'OPENCODE-MANAGED:karpathy-skills:START'){Write-Output 'SKIP'; exit 0}; $body=Get-Content -LiteralPath $f -Raw -Encoding UTF8; $b=@('','<!-- OPENCODE-MANAGED:karpathy-skills:START -->','## Andrej Karpathy Inspired Guidelines','',$body,'','<!-- OPENCODE-MANAGED:karpathy-skills:END -->'); Add-Content -LiteralPath $a -Value $b -Encoding UTF8; Write-Output 'ADDED'"
-if errorlevel 1 (
-    echo   [WARN] could not append andrej-karpathy-skills to AGENTS.md
-    endlocal & exit /b 0
-)
-echo   [OK] andrej-karpathy-skills merged into AGENTS.md
-endlocal & exit /b 0
-
-rem ============================================================
-rem :install_rea_instructions
-rem   Download REA reverse engineering agent docs/README guidance
-rem ============================================================
-:install_rea_instructions
-setlocal DisableDelayedExpansion
-set "REA_URL=https://raw.githubusercontent.com/morluto/rea/main/README.md"
-set "REA_FILE=%WORK%\rea-readme.md"
-curl -L -s --fail -o "%REA_FILE%" "%REA_URL%"
-if errorlevel 1 (
-    echo   [WARN] download failed: rea
-    endlocal & exit /b 0
-)
-
-powershell -NoProfile -Command "$a='%OC_DIR%\AGENTS.md'; $f='%REA_FILE%'; $c=if(Test-Path -LiteralPath $a){Get-Content -LiteralPath $a -Raw -Encoding UTF8}else{''}; if($c -match 'OPENCODE-MANAGED:rea:START'){Write-Output 'SKIP'; exit 0}; $body=Get-Content -LiteralPath $f -Raw -Encoding UTF8; $b=@('','<!-- OPENCODE-MANAGED:rea:START -->','## REA - Reverse Engineer Anything','',$body,'','<!-- OPENCODE-MANAGED:rea:END -->'); Add-Content -LiteralPath $a -Value $b -Encoding UTF8; Write-Output 'ADDED'"
-if errorlevel 1 (
-    echo   [WARN] could not append rea to AGENTS.md
-    endlocal & exit /b 0
-)
-echo   [OK] rea merged into AGENTS.md
-endlocal & exit /b 0
 
 rem ============================================================
 rem :install_plugins
