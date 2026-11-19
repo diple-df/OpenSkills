@@ -95,14 +95,8 @@ Registered through `opencode plugin add`, which writes the global
 | `opencode-dir-tree-tui` | file tree sidebar with Git status and ignore rules |
 | `cache-stats` | cache hit rate, token split, and cost per session and subagent |
 | `@atonev/opencode-short-term-memory` | structured session memory that survives compaction |
-| `opencode-websearch-cited` | web search with inline citations |
 | `@firecrawl/opencode` | Firecrawl developer index, Alexandria data, CLI skills |
 | `opencode-see-image` | routes images to a vision model for non-vision models |
-| `opencode-pty` | real PTY background processes with interactive input |
-| `opencode-mermaid-renderer` | renders mermaid blocks as ASCII art |
-| `@franlol/opencode-md-table-formatter` | aligns markdown tables after generation |
-| `@spoons-and-mirrors/subtask2` | chains, loops, and relays subagent results |
-| `opencode-zellij-namer` | AI-driven Zellij session naming |
 
 Two plugins install differently:
 
@@ -114,11 +108,26 @@ Two plugins install differently:
   `%USERPROFILE%\.config\opencode\plugins\cache-stats` and enables it in
   `cli.json`, which is where TUI-only plugins must live.
 
-`opencode-websearch-cited` needs one `websearch_cited` model per provider in your
-config, and it must stay last in the plugin list so it does not interfere with
-provider authentication. `opencode-zellij-namer` degrades to pattern-based naming
-without `GEMINI_API_KEY`. `opencode-see-image` is a no-op once the active model
-can already accept image input.
+`opencode-see-image` is a no-op once the active model can already accept image
+input.
+
+### Plugins that are not installed
+
+OpenCode 2 requires a plugin's default export to be an object with an `id` and
+an `effect` or a `setup` function. Each of the following publishes a bare async
+function at its npm `latest`, so it fails to load with `Plugin must export a
+default definition with an id and an effect or setup function` and the OpenCode
+server lists it as failed:
+
+- `opencode-pty`
+- `opencode-mermaid-renderer`
+- `@franlol/opencode-md-table-formatter`
+- `@spoons-and-mirrors/subtask2`
+- `opencode-zellij-namer`
+- `opencode-websearch-cited`
+
+The installer skips them and, on every run, removes any of these entries a
+previous version of the script left in `opencode.json`.
 
 ### Config file encoding
 
@@ -137,6 +146,7 @@ plugins, and every file it writes itself is BOM-free.
 - `:plugin_add` prefers `opencode plugin add` and falls back to editing
   `opencode.json` directly when the CLI is missing or fails.
 - `:fix_bom` normalises config encoding before the plugin step.
+- `:drop_legacy_plugins` removes V1-only plugin entries from `opencode.json`.
 - A summary at the end lists what was installed, skipped, and failed, and the
   script exits with `0` on success or `1` when a step failed.
 

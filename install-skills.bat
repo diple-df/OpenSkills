@@ -5,6 +5,7 @@ title opencode Skills Installer
 set "OC_DIR=%USERPROFILE%\.config\opencode"
 set "SKILLS=%OC_DIR%\skills"
 set "WORK=%TEMP%\opencode-skills-install"
+set "LEGACY_PS=%WORK%\drop-legacy.ps1"
 
 set "INSTALLED="
 set "SKIPPED="
@@ -239,16 +240,48 @@ call :plugin_add "@atonev/opencode-short-term-memory"
 call :plugin_add "@firecrawl/opencode"
 call :plugin_add "opencode-see-image"
 
-rem --- tools and rendering ---
-call :plugin_add "opencode-pty"
-call :plugin_add "opencode-mermaid-renderer"
-call :plugin_add "@franlol/opencode-md-table-formatter"
-call :plugin_add "@spoons-and-mirrors/subtask2"
-call :plugin_add "opencode-zellij-namer"
+rem --- removed: V1-only plugins that cannot load on OpenCode 2.x ---
+rem   opencode-pty, opencode-mermaid-renderer, @franlol/opencode-md-table-formatter,
+rem   @spoons-and-mirrors/subtask2, opencode-zellij-namer and opencode-websearch-cited
+rem   export a bare async function as their default. OpenCode 2 requires the
+rem   default export to be an object with an id and an effect or setup function,
+rem   so each of them fails with "Plugin must export a default definition".
+call :drop_legacy_plugins
 
-rem --- last on purpose: it must not interfere with provider auth ---
-call :plugin_add "opencode-websearch-cited"
+exit /b 0
 
+rem ============================================================
+rem :drop_legacy_plugins
+rem   Delete the V1-only plugin entries from opencode.json, so a config
+rem   produced by an older version of this script stops failing at startup.
+rem ============================================================
+:drop_legacy_plugins
+if not exist "%LEGACY_PS%" goto :dl_write
+goto :dl_run
+:dl_write
+set "DL_START=%LEGACY_PS%"
+> "%LEGACY_PS%" echo $ErrorActionPreference = 'Stop'
+>>"%LEGACY_PS%" echo $p = '%OC_DIR%\opencode.json'
+>>"%LEGACY_PS%" echo if (-not (Test-Path $p)) { Write-Output 'Plugin:opencode.json=absent'; exit 0 }
+>>"%LEGACY_PS%" echo $legacy = @('opencode-pty','opencode-mermaid-renderer','@franlol/opencode-md-table-formatter','@spoons-and-mirrors/subtask2','opencode-zellij-namer','opencode-websearch-cited')
+>>"%LEGACY_PS%" echo $c = Get-Content -LiteralPath $p -Raw ^| ConvertFrom-Json
+>>"%LEGACY_PS%" echo $kept = @($c.plugins ^| Where-Object { $target = if ($_ -is [string]) { $_ } else { $_.package }; -not ($legacy -contains $target) })
+>>"%LEGACY_PS%" echo $removed = @($c.plugins).Count - $kept.Count
+>>"%LEGACY_PS%" echo if ($removed -gt 0) { $c.plugins = $kept; $enc = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($p, ($c ^| ConvertTo-Json -Depth 32), $enc) }
+>>"%LEGACY_PS%" echo Write-Output ('Plugin:legacy-removed=' + $removed)
+:dl_run
+set "DL_LINE="
+for /f "usebackq tokens=1,* delims==" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%LEGACY_PS%" 2^>nul`) do (
+    if /i "%%a"=="Plugin:legacy-removed" set "DL_LINE=%%b"
+    if /i "%%a"=="Plugin:opencode.json" set "DL_LINE=absent"
+)
+if not defined DL_LINE (
+    echo   [WARN] could not check for legacy plugins
+    exit /b 0
+)
+if "!DL_LINE!"=="absent" exit /b 0
+if "!DL_LINE!"=="0" exit /b 0
+echo   [OK] removed !DL_LINE! legacy plugin entries from opencode.json
 exit /b 0
 
 rem ============================================================
