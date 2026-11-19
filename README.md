@@ -111,13 +111,12 @@ Two plugins install differently:
 `opencode-see-image` is a no-op once the active model can already accept image
 input.
 
-### Plugins that are not installed
+### Plugins installed but switched off
 
 OpenCode 2 requires a plugin's default export to be an object with an `id` and
 an `effect` or a `setup` function. Each of the following publishes a bare async
 function at its npm `latest`, so it fails to load with `Plugin must export a
-default definition with an id and an effect or setup function` and the OpenCode
-server lists it as failed:
+default definition with an id and an effect or setup function`:
 
 - `opencode-pty`
 - `opencode-mermaid-renderer`
@@ -126,8 +125,12 @@ server lists it as failed:
 - `opencode-zellij-namer`
 - `opencode-websearch-cited`
 
-The installer skips them and, on every run, removes any of these entries a
-previous version of the script left in `opencode.json`.
+The installer still fetches them, then adds a `-<package>` entry to
+`opencode.json`. The `-` prefix excludes the plugin from loading while keeping
+its package installed and the descriptor in place, so a future release that
+ships a V2 definition only needs the prefix removed. To do that, change the
+plugin's line from `call :plugin_add_disabled` to `call :plugin_add` and re-run
+the script — the package is already on disk, so this costs no download.
 
 ### Config file encoding
 
@@ -146,7 +149,10 @@ plugins, and every file it writes itself is BOM-free.
 - `:plugin_add` prefers `opencode plugin add` and falls back to editing
   `opencode.json` directly when the CLI is missing or fails.
 - `:fix_bom` normalises config encoding before the plugin step.
-- `:drop_legacy_plugins` removes V1-only plugin entries from `opencode.json`.
+- `:plugin_add_disabled` installs a package and then records it with a `-`
+  prefix, so the descriptor stays in `opencode.json` without the plugin loading.
+  Its PowerShell body is written to a temporary script, because a
+  `powershell -Command` string loses quotes on the way through `cmd`.
 - A summary at the end lists what was installed, skipped, and failed, and the
   script exits with `0` on success or `1` when a step failed.
 

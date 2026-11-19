@@ -5,7 +5,6 @@ title opencode Skills Installer
 set "OC_DIR=%USERPROFILE%\.config\opencode"
 set "SKILLS=%OC_DIR%\skills"
 set "WORK=%TEMP%\opencode-skills-install"
-set "LEGACY_PS=%WORK%\drop-legacy.ps1"
 
 set "INSTALLED="
 set "SKIPPED="
@@ -240,48 +239,20 @@ call :plugin_add "@atonev/opencode-short-term-memory"
 call :plugin_add "@firecrawl/opencode"
 call :plugin_add "opencode-see-image"
 
-rem --- removed: V1-only plugins that cannot load on OpenCode 2.x ---
-rem   opencode-pty, opencode-mermaid-renderer, @franlol/opencode-md-table-formatter,
-rem   @spoons-and-mirrors/subtask2, opencode-zellij-namer and opencode-websearch-cited
-rem   export a bare async function as their default. OpenCode 2 requires the
-rem   default export to be an object with an id and an effect or setup function,
-rem   so each of them fails with "Plugin must export a default definition".
-call :drop_legacy_plugins
+rem --- installed but disabled on purpose ---
+rem   These six export a bare async function as their default, which OpenCode 2
+rem   rejects: "Plugin must export a default definition with an id and an effect
+rem   or setup function". Installing them keeps the package on disk and a "-"
+rem   entry in opencode.json, so they never load. Re-check with
+rem   "opencode plugin check" or by reading the upstream READMEs; once a release
+rem   ships a V2 definition, delete the "-" prefix here and re-run this script.
+call :plugin_add_disabled "opencode-pty"
+call :plugin_add_disabled "opencode-mermaid-renderer"
+call :plugin_add_disabled "@franlol/opencode-md-table-formatter"
+call :plugin_add_disabled "@spoons-and-mirrors/subtask2"
+call :plugin_add_disabled "opencode-zellij-namer"
+call :plugin_add_disabled "opencode-websearch-cited"
 
-exit /b 0
-
-rem ============================================================
-rem :drop_legacy_plugins
-rem   Delete the V1-only plugin entries from opencode.json, so a config
-rem   produced by an older version of this script stops failing at startup.
-rem ============================================================
-:drop_legacy_plugins
-if not exist "%LEGACY_PS%" goto :dl_write
-goto :dl_run
-:dl_write
-set "DL_START=%LEGACY_PS%"
-> "%LEGACY_PS%" echo $ErrorActionPreference = 'Stop'
->>"%LEGACY_PS%" echo $p = '%OC_DIR%\opencode.json'
->>"%LEGACY_PS%" echo if (-not (Test-Path $p)) { Write-Output 'Plugin:opencode.json=absent'; exit 0 }
->>"%LEGACY_PS%" echo $legacy = @('opencode-pty','opencode-mermaid-renderer','@franlol/opencode-md-table-formatter','@spoons-and-mirrors/subtask2','opencode-zellij-namer','opencode-websearch-cited')
->>"%LEGACY_PS%" echo $c = Get-Content -LiteralPath $p -Raw ^| ConvertFrom-Json
->>"%LEGACY_PS%" echo $kept = @($c.plugins ^| Where-Object { $target = if ($_ -is [string]) { $_ } else { $_.package }; -not ($legacy -contains $target) })
->>"%LEGACY_PS%" echo $removed = @($c.plugins).Count - $kept.Count
->>"%LEGACY_PS%" echo if ($removed -gt 0) { $c.plugins = $kept; $enc = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($p, ($c ^| ConvertTo-Json -Depth 32), $enc) }
->>"%LEGACY_PS%" echo Write-Output ('Plugin:legacy-removed=' + $removed)
-:dl_run
-set "DL_LINE="
-for /f "usebackq tokens=1,* delims==" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%LEGACY_PS%" 2^>nul`) do (
-    if /i "%%a"=="Plugin:legacy-removed" set "DL_LINE=%%b"
-    if /i "%%a"=="Plugin:opencode.json" set "DL_LINE=absent"
-)
-if not defined DL_LINE (
-    echo   [WARN] could not check for legacy plugins
-    exit /b 0
-)
-if "!DL_LINE!"=="absent" exit /b 0
-if "!DL_LINE!"=="0" exit /b 0
-echo   [OK] removed !DL_LINE! legacy plugin entries from opencode.json
 exit /b 0
 
 rem ============================================================
@@ -393,6 +364,52 @@ if errorlevel 1 (
     exit /b 1
 )
 echo   [OK] plugin added to opencode.json: %PSPEC%
+exit /b 0
+
+rem ============================================================
+rem :plugin_add_disabled  "spec"
+rem   Install a plugin, then record it as "-spec" so the server skips it.
+rem   The "-" form still names the package, which keeps the install and the
+rem   descriptor in place for a future V2 release.
+rem ============================================================
+:plugin_add_disabled
+call :plugin_add "%~1"
+set "PDS_STATUS=!errorlevel!"
+call :plugin_disable "%~1"
+if "!PDS_STATUS!"=="0" exit /b 0
+exit /b 1
+
+rem ============================================================
+rem :plugin_disable  "spec"
+rem   Turn "spec" into the disabled "-spec" entry in opencode.json.
+rem   The PowerShell body lives in a file: a "-Command" string reaches
+rem   PowerShell with quotes eaten by cmd, which breaks the syntax.
+rem ============================================================
+:plugin_disable
+set "DSPEC=%~1"
+set "DPS_FILE=%WORK%\plugin-disable.ps1"
+> "%DPS_FILE%" echo param([string]$Target)
+>>"%DPS_FILE%" echo $ErrorActionPreference = 'Stop'
+>>"%DPS_FILE%" echo $spec = '-' + $Target
+>>"%DPS_FILE%" echo $p = Join-Path '%OC_DIR%' 'opencode.json'
+>>"%DPS_FILE%" echo if (-not (Test-Path -LiteralPath $p)) { Write-Output 'ABSENT'; exit 0 }
+>>"%DPS_FILE%" echo $c = Get-Content -LiteralPath $p -Raw ^| ConvertFrom-Json
+>>"%DPS_FILE%" echo $entries = @($c.plugins)
+>>"%DPS_FILE%" echo $keep = @($entries ^| Where-Object { $n = if ($_ -is [string]) { $_ } else { $_.package }; $n -ne $Target -and $n -ne $spec })
+>>"%DPS_FILE%" echo $names = @($keep ^| ForEach-Object { if ($_ -is [string]) { $_ } else { $_.package } })
+>>"%DPS_FILE%" echo if ($names -contains $spec) { Write-Output 'SKIP'; exit 0 }
+>>"%DPS_FILE%" echo $c.plugins = @($keep) + $spec
+>>"%DPS_FILE%" echo $enc = New-Object System.Text.UTF8Encoding($false)
+>>"%DPS_FILE%" echo [System.IO.File]::WriteAllText($p, ($c ^| ConvertTo-Json -Depth 32), $enc)
+>>"%DPS_FILE%" echo Write-Output 'DISABLED'
+set "DPS_OUT="
+for /f "usebackq delims=" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%DPS_FILE%" -Target "%DSPEC%" 2^>nul`) do set "DPS_OUT=%%a"
+if not defined DPS_OUT (
+    echo   [WARN] could not mark %DSPEC% as disabled in opencode.json
+    set "EXITCODE=1"
+    exit /b 0
+)
+echo   [OK] %DSPEC%: !DPS_OUT!
 exit /b 0
 
 rem ============================================================
