@@ -93,6 +93,7 @@ Registered through `opencode plugin add`, which writes the global
 | `opencode-wakatime` | WakaTime activity tracking |
 | `opencode-skills-tui` | skills sidebar with loaded state, `SKILL.md` preview, `@` insert |
 | `opencode-dir-tree-tui` | file tree sidebar with Git status and ignore rules |
+| `cache-stats` | cache hit rate, token split, and cost per session and subagent |
 | `@atonev/opencode-short-term-memory` | structured session memory that survives compaction |
 | `opencode-websearch-cited` | web search with inline citations |
 | `@firecrawl/opencode` | Firecrawl developer index, Alexandria data, CLI skills |
