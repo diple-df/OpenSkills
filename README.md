@@ -26,7 +26,19 @@ Requirements:
 
 ### Skills
 
-Installed into `%USERPROFILE%\.config\opencode\skills\<name>`.
+Installed into `%USERPROFILE%\.config\opencode\skills\<name>` — 29 skills, one
+directory each.
+
+That is not the number the TUI shows. Plugins bring skills of their own, so the
+pick-list is larger than this table:
+
+| Source | Skills |
+|--------|-------:|
+| `~/.config/opencode/skills/` (this script) | 29 |
+| `superpowers` plugin | 15 |
+| `@firecrawl/opencode` plugin | 12 |
+
+About 59 in total, depending on the OpenCode version.
 
 | Skill | Upstream |
 |-------|----------|
