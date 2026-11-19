@@ -325,18 +325,24 @@ set "INSTALLED=!INSTALLED! cache-stats"
 :cs_enable
 set "CS_ENABLE_PS=%WORK%\cs-enable.ps1"
 > "%CS_ENABLE_PS%" echo $p = Join-Path '%OC_DIR%' 'cli.json';
->>"%CS_ENABLE_PS%" echo $spec = './plugins/cache-stats';
+>>"%CS_ENABLE_PS%" echo $want = @('./plugins/cache-stats','@streetturtle/opencode-current-model','@streetturtle/opencode-current-prompt');
 >>"%CS_ENABLE_PS%" echo if (Test-Path -LiteralPath $p) { $c = Get-Content -LiteralPath $p -Raw ^| ConvertFrom-Json } else { $c = [pscustomobject]@{ '$schema' = 'https://opencode.ai/v2/cli.json' } };
 >>"%CS_ENABLE_PS%" echo if (-not $c.PSObject.Properties['plugins']) { $c ^| Add-Member -NotePropertyName plugins -NotePropertyValue @() -Force };
->>"%CS_ENABLE_PS%" echo $listed = @($c.plugins ^| ForEach-Object { if ($_ -is [string]) { $_ } else { $_.package } });
->>"%CS_ENABLE_PS%" echo if ($listed -contains $spec) { Write-Output 'SKIP'; exit 0 };
->>"%CS_ENABLE_PS%" echo $c.plugins = @($c.plugins) + $spec;
->>"%CS_ENABLE_PS%" echo $enc = New-Object System.Text.UTF8Encoding($false);
->>"%CS_ENABLE_PS%" echo [System.IO.File]::WriteAllText($p, ($c ^| ConvertTo-Json -Depth 20), $enc);
->>"%CS_ENABLE_PS%" echo Write-Output 'ADDED';
+>>"%CS_ENABLE_PS%" echo $added = @();
+>>"%CS_ENABLE_PS%" echo foreach ($spec in $want) {
+>>"%CS_ENABLE_PS%" echo   $listed = @($c.plugins ^| ForEach-Object { if ($_ -is [string]) { $_ } else { $_.package } });
+>>"%CS_ENABLE_PS%" echo   if ($listed -contains $spec) { Write-Output ('SKIP ' + $spec); continue };
+>>"%CS_ENABLE_PS%" echo   $c.plugins = @($c.plugins) + $spec;
+>>"%CS_ENABLE_PS%" echo   $added += $spec;
+>>"%CS_ENABLE_PS%" echo   Write-Output ('ADDED ' + $spec);
+>>"%CS_ENABLE_PS%" echo }
+>>"%CS_ENABLE_PS%" echo if ($added.Count -gt 0) {
+>>"%CS_ENABLE_PS%" echo   $enc = New-Object System.Text.UTF8Encoding($false);
+>>"%CS_ENABLE_PS%" echo   [System.IO.File]::WriteAllText($p, ($c ^| ConvertTo-Json -Depth 20), $enc);
+>>"%CS_ENABLE_PS%" echo }
 powershell -NoProfile -ExecutionPolicy Bypass -File "%CS_ENABLE_PS%"
 if errorlevel 1 (
-    echo   [WARN] could not enable cache-stats in cli.json
+    echo   [WARN] could not enable the TUI plugins in cli.json
     set "EXITCODE=1"
 )
 exit /b 0

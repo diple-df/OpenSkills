@@ -110,6 +110,14 @@ Registered through `opencode plugin add`, which writes the global
 | `@firecrawl/opencode` | Firecrawl developer index, Alexandria data, CLI skills |
 | `opencode-see-image` | routes images to a vision model for non-vision models |
 
+Two more are TUI-only sidebar widgets. They are not in the table above because
+they live in `cli.json`, not `opencode.json`:
+
+| Sidebar widget | Purpose |
+|----------------|---------|
+| `@streetturtle/opencode-current-model` | current model and provider; click to open the model picker |
+| `@streetturtle/opencode-current-prompt` | keeps the latest user prompt visible while you read the reply |
+
 Two plugins install differently:
 
 - `superpowers` is an npm package installed into
@@ -119,6 +127,10 @@ Two plugins install differently:
   installer copies its plugin directory to
   `%USERPROFILE%\.config\opencode\plugins\cache-stats` and enables it in
   `cli.json`, which is where TUI-only plugins must live.
+- `@streetturtle/opencode-current-model` and
+  `@streetturtle/opencode-current-prompt` ship only a `./tui` entry, so they go
+  into the same `cli.json` `plugins` array. One label, `:cs_enable`, appends all
+  three TUI descriptors and skips any that are already listed.
 
 `opencode-see-image` is a no-op once the active model can already accept image
 input.
@@ -173,7 +185,8 @@ plugins, and every file it writes itself is BOM-free.
 - Delete the skill folders under `%USERPROFILE%\.config\opencode\skills`.
 - Remove the `OPENCODE-MANAGED` blocks from `%USERPROFILE%\.config\opencode\AGENTS.md`.
 - Remove the plugin entries with `opencode plugin remove <package>`.
-- Delete `%USERPROFILE%\.config\opencode\plugins\cache-stats` and its `cli.json`
-  entry.
+- Delete `%USERPROFILE%\.config\opencode\plugins\cache-stats` and remove the
+  three `cli.json` plugin entries (`cache-stats`, `current-model`,
+  `current-prompt`).
 - Delete `%USERPROFILE%\.config\opencode\node_modules\superpowers` and its
   `opencode.json` entry.
