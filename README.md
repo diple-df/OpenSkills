@@ -20,7 +20,7 @@ Requirements:
 
 - Windows 10 1803+ (`curl.exe` is used for downloads)
 - OpenCode in `PATH` (skills still install if it is missing)
-- Node.js and `npm` for the plugin step and for `ai-memory` skills
+- Node.js and `npm` for the plugin step
 
 ## What gets installed
 
@@ -30,7 +30,6 @@ Installed into `%USERPROFILE%\.config\opencode\skills\<name>`.
 
 | Skill | Upstream |
 |-------|----------|
-| `firecrawl-research` | glebis/claude-skills |
 | `skill-creator` | anthropics/skills |
 | `webapp-testing` | anthropics/skills |
 | `cloudflare` | cloudflare/skills |
@@ -49,9 +48,18 @@ Installed into `%USERPROFILE%\.config\opencode\skills\<name>`.
 | `doc-coauthoring` | anthropics/skills |
 | `security-audit` | cloudflare/security-audit-skill |
 | `unslop` | heydamir/unslop |
+| `ppt-design-skill` | sunchaokun/PPT-Design-Skill |
+| `typeui-fundamentals` | bergside/typeui |
+| `modern-web-guidance` | GoogleChrome/modern-web-guidance |
+| `ponytail` | DietrichGebert/ponytail |
+| `ascii-art-diagrams` | jasnell/opencode-skill-ascii-art-diagrams |
 
 Each skill is fetched from the upstream `main` branch, and the installer verifies
 that `SKILL.md` is present before copying it into place.
+
+`modern-web-guidance` runs `npx modern-web-guidance` at query time, so the skill
+body is small but the guides are fetched on demand. `ascii-art-diagrams` needs
+Python 3 for its `scripts/grid.py` and `scripts/verify.py` helpers.
 
 ### Instruction packs
 
@@ -65,40 +73,59 @@ run, leaving your own rules untouched:
 
 ### Plugins
 
-- `superpowers` - planning, TDD, debugging, and review workflow skills
-- `@tarquinen/opencode-dcp` - dynamic context pruning
-- `opencode-wakatime` - WakaTime activity tracking
-- `opencode-openrouter-auth` - OpenRouter authentication
+Registered through `opencode plugin add`, which writes the global
+`opencode.json`:
 
-Existing plugin entries in `opencode.json` are left as they are.
+| Plugin | Purpose |
+|--------|---------|
+| `superpowers` | planning, TDD, debugging, and review workflow skills (local path) |
+| `@tarquinen/opencode-dcp` | dynamic context pruning |
+| `opencode-wakatime` | WakaTime activity tracking |
+| `opencode-skills-tui` | skills sidebar with loaded state, `SKILL.md` preview, `@` insert |
+| `opencode-dir-tree-tui` | file tree sidebar with Git status and ignore rules |
+| `@atonev/opencode-short-term-memory` | structured session memory that survives compaction |
+| `opencode-websearch-cited` | web search with inline citations |
+| `@firecrawl/opencode` | Firecrawl developer index, Alexandria data, CLI skills |
+| `opencode-see-image` | routes images to a vision model for non-vision models |
+| `opencode-pty` | real PTY background processes with interactive input |
+| `opencode-mermaid-renderer` | renders mermaid blocks as ASCII art |
+| `@franlol/opencode-md-table-formatter` | aligns markdown tables after generation |
+| `@spoons-and-mirrors/subtask2` | chains, loops, and relays subagent results |
+| `opencode-zellij-namer` | AI-driven Zellij session naming |
 
-### Optional: ai-memory
+Two plugins install differently:
 
-Long-term memory for coding agents: a local server that remembers decisions,
-failed approaches, and open questions per project, with MCP tools, hooks, and
-its own skills.
+- `superpowers` is an npm package installed into
+  `%USERPROFILE%\.config\opencode\node_modules` and registered by path, because
+  the CLI only accepts npm and Git specs.
+- `cache-stats` (nmdra/opencode-cache-stats) is not published to npm. The
+  installer copies its plugin directory to
+  `%USERPROFILE%\.config\opencode\plugins\cache-stats` and enables it in
+  `cli.json`, which is where TUI-only plugins must live.
 
-It is off by default. Enable it either way:
+`opencode-websearch-cited` needs one `websearch_cited` model per provider in your
+config, and it must stay last in the plugin list so it does not interfere with
+provider authentication. `opencode-zellij-namer` degrades to pattern-based naming
+without `GEMINI_API_KEY`. `opencode-see-image` is a no-op once the active model
+can already accept image input.
 
-```bat
-install-skills.bat --with-ai-memory
-```
+### Config file encoding
 
-or answer `y` at the prompt. The script runs the official upstream installer and
-then `ai-memory setup --yes --agent opencode`. Remove it later with
-`ai-memory uninstall --apply`.
-
-Skip it if you only work in short one-off sessions.
+OpenCode writes `opencode.json` with a UTF-8 BOM and then refuses to parse a
+config that begins with one, reporting `Invalid global configuration`. The
+installer strips the BOM from `opencode.json` and `cli.json` before registering
+plugins, and every file it writes itself is BOM-free.
 
 ## How it works
 
 - `:install_skill` downloads `https://github.com/<repo>/archive/refs/heads/main.zip`,
   expands it into `%TEMP%\opencode-skills-install`, and copies the skill
   subdirectory into the OpenCode skills folder.
-- `:install_raw` downloads individual files via `raw.githubusercontent.com`, which
-  is used for skills that need a fixed file list.
 - Managed `AGENTS.md` sections are wrapped in
   `<!-- OPENCODE-MANAGED:<name>:START -->` / `:END` markers.
+- `:plugin_add` prefers `opencode plugin add` and falls back to editing
+  `opencode.json` directly when the CLI is missing or fails.
+- `:fix_bom` normalises config encoding before the plugin step.
 - A summary at the end lists what was installed, skipped, and failed, and the
   script exits with `0` on success or `1` when a step failed.
 
@@ -106,6 +133,8 @@ Skip it if you only work in short one-off sessions.
 
 - Delete the skill folders under `%USERPROFILE%\.config\opencode\skills`.
 - Remove the `OPENCODE-MANAGED` blocks from `%USERPROFILE%\.config\opencode\AGENTS.md`.
-- Remove the plugin entries from `%USERPROFILE%\.config\opencode\opencode.json`
-  and the matching packages from `%USERPROFILE%\.config\opencode\node_modules`.
-- If installed, run `ai-memory uninstall --apply`.
+- Remove the plugin entries with `opencode plugin remove <package>`.
+- Delete `%USERPROFILE%\.config\opencode\plugins\cache-stats` and its `cli.json`
+  entry.
+- Delete `%USERPROFILE%\.config\opencode\node_modules\superpowers` and its
+  `opencode.json` entry.

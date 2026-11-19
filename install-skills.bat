@@ -52,7 +52,6 @@ call :install_policy
 if errorlevel 1 goto :end
 
 rem --- skills ---
-call :install_raw firecrawl-research            glebis/claude-skills             firecrawl-research            ".claude-plugin/plugin.json .env.example SKILL.md assets/references.bib assets/templates/myst-scientific-paper.md assets/templates/pandoc-scholarly-paper.md requirements.txt scripts/convert_academic.py scripts/firecrawl_research.py scripts/generate_bibliography.py"
 call :install_skill skill-creator               anthropics/skills                skills/skill-creator
 call :install_skill webapp-testing              anthropics/skills                skills/webapp-testing
 call :install_skill cloudflare                  cloudflare/skills                skills/cloudflare
@@ -71,6 +70,11 @@ call :install_skill xlsx                         anthropics/skills              
 call :install_skill doc-coauthoring               anthropics/skills                skills/doc-coauthoring
 call :install_skill security-audit                cloudflare/security-audit-skill  skills/security-audit
 call :install_skill unslop                        heydamir/unslop                  skills/unslop
+call :install_skill ppt-design-skill              sunchaokun/PPT-Design-Skill      skill
+call :install_skill typeui-fundamentals           bergside/typeui                  skills/fundamentals
+call :install_skill modern-web-guidance           GoogleChrome/modern-web-guidance skills/modern-web-guidance
+call :install_skill ponytail                      DietrichGebert/ponytail          skills/ponytail
+call :install_skill ascii-art-diagrams            jasnell/opencode-skill-ascii-art-diagrams
 
 rem --- extra instruction packs (merged into AGENTS.md) ---
 call :install_karpathy_instructions
@@ -79,17 +83,7 @@ call :install_rea_instructions
 rem --- plugins ---
 call :install_plugins
 
-rem --- optional: ai-memory (memory server + MCP + hooks + skills) ---
-rem   Skipped unless --with-ai-memory is passed or the prompt is answered "y".
-set "AIM_STATUS=skipped"
-if /i "%~1"=="--with-ai-memory" goto :ai_memory_yes
-call :print_ai_memory_info
-choice /c yn /n /t 15 /d n /m "  Install ai-memory (memory server, MCP, hooks, skills)? [y/N] "
-if errorlevel 2 goto :ai_memory_no
-:ai_memory_yes
-call :install_ai_memory
-if errorlevel 1 (set "AIM_STATUS=failed") else (set "AIM_STATUS=installed")
-:ai_memory_no
+rem --- ai-memory is no longer installed by this pack ---
 
 rem --- shell non-interactive strategy (merged into AGENTS.md) ---
 call :install_shell_strategy
@@ -101,7 +95,6 @@ echo ============================================
 if defined INSTALLED echo   Installed:!INSTALLED!
 if defined SKIPPED  echo   Skipped  :!SKIPPED!
 if defined FAILED   echo   Failed   :!FAILED!
-echo   ai-memory: !AIM_STATUS!  ^(enable with: install-skills.bat --with-ai-memory^)
 echo.
 echo   Restart opencode to load the new skills and plugins.
 echo   Verify plugins with: opencode plugin list
@@ -129,44 +122,6 @@ if exist "%POLICY%" (
     if not errorlevel 1 echo   [OK] global AGENTS.md policy checked
 )
 endlocal & exit /b 0
-
-rem ============================================================
-rem :install_raw  "name" "owner/repo" "subpath" "file file ..."
-rem   Download listed files via raw.githubusercontent. Used for
-rem   repos whose zips contain entries with invalid characters.
-rem ============================================================
-:install_raw
-set "SKILL=%~1"
-set "REPO=%~2"
-set "SUBPATH=%~3"
-set "FILES=%~4"
-
-if exist "%SKILLS%\%SKILL%\SKILL.md" (
-    echo   [SKIP] %SKILL% already installed
-    set "SKIPPED=!SKIPPED! %SKILL%"
-    exit /b 0
-)
-
-echo   [INSTALL] %SKILL%
-for %%f in (%FILES%) do (
-    curl -L -s --fail --create-dirs -o "%SKILLS%\%SKILL%\%%f" "https://raw.githubusercontent.com/%REPO%/main/%SUBPATH%/%%f"
-    if errorlevel 1 (
-        echo   [ERROR] download failed for %SKILL%: %%f
-        set "FAILED=!FAILED! %SKILL%"
-        set "EXITCODE=1"
-        del "%SKILLS%\%SKILL%\SKILL.md" >nul 2>nul
-        exit /b 1
-    )
-)
-if not exist "%SKILLS%\%SKILL%\SKILL.md" (
-    echo   [ERROR] download failed for %SKILL%
-    set "FAILED=!FAILED! %SKILL%"
-    set "EXITCODE=1"
-    exit /b 1
-)
-echo   [OK] %SKILL%
-set "INSTALLED=!INSTALLED! %SKILL%"
-exit /b 0
 
 rem ============================================================
 rem :install_skill  "name" "owner/repo" ["subpath/inside/zip"]
@@ -282,6 +237,8 @@ rem   npm/Git specs, so the local superpowers path is registered
 rem   separately by :ensure_superpowers_plugin. Fails gracefully.
 rem ============================================================
 :install_plugins
+call :fix_bom
+
 where npm >nul 2>nul
 if errorlevel 1 (
     echo   [WARN] npm not found - skipping superpowers package install
@@ -310,73 +267,106 @@ if errorlevel 1 (
 
 call :ensure_superpowers_plugin
 
+rem --- core ---
 call :plugin_add "@tarquinen/opencode-dcp"
 call :plugin_add "opencode-wakatime"
-call :plugin_add "opencode-openrouter-auth"
+
+rem --- sidebar / TUI ---
+call :plugin_add "opencode-skills-tui"
+call :plugin_add "opencode-dir-tree-tui"
+call :install_cache_stats
+
+rem --- context and search ---
+call :plugin_add "@atonev/opencode-short-term-memory"
+call :plugin_add "@firecrawl/opencode"
+call :plugin_add "opencode-see-image"
+
+rem --- tools and rendering ---
+call :plugin_add "opencode-pty"
+call :plugin_add "opencode-mermaid-renderer"
+call :plugin_add "@franlol/opencode-md-table-formatter"
+call :plugin_add "@spoons-and-mirrors/subtask2"
+call :plugin_add "opencode-zellij-namer"
+
+rem --- last on purpose: it must not interfere with provider auth ---
+call :plugin_add "opencode-websearch-cited"
 
 exit /b 0
 
 rem ============================================================
-rem :print_ai_memory_info
-rem   Plain-language explanation shown before the optional prompt.
+rem :fix_bom
+rem   OpenCode writes its JSON with a UTF-8 BOM and then refuses
+rem   to parse a config that starts with one: "Invalid global
+rem   configuration". Rewrite opencode.json and cli.json without
+rem   the BOM so "opencode plugin add" works. Content is kept
+rem   byte-for-byte apart from the leading mark.
 rem ============================================================
-:print_ai_memory_info
-echo.
-echo   ai-memory - long-term memory for coding agents
-echo   ---------------------------------------------
-echo   A small local server that remembers what your agents learned
-echo   about each project: decisions, failed approaches, open questions.
-echo   Memory is kept as readable markdown pages plus a local index.
-echo.
-echo   Useful if you:
-echo     - restart often and hate re-explaining the same context
-echo     - switch agents or machines, or share a repo with a team
-echo     - want handoffs that say exactly where work stopped
-echo.
-echo   What it costs:
-echo     - runs a background service on this machine
-echo     - session notes are stored locally; nothing leaves the machine
-echo       unless you configure an LLM provider
-echo     - adds MCP tools and hooks to your agents, which use some context
-echo     - zero LLM calls by default; semantic search and summaries are
-echo       optional and need an API key
-echo.
-echo   Skip it for short one-off sessions. Remove later with:
-echo     ai-memory uninstall --apply
-echo   ---------------------------------------------
-echo.
+:fix_bom
+powershell -NoProfile -Command "$enc=New-Object System.Text.UTF8Encoding($false); foreach($n in @('opencode.json','cli.json')){ $p=Join-Path '%OC_DIR%' $n; if(-not (Test-Path -LiteralPath $p)){ continue }; $b=[System.IO.File]::ReadAllBytes($p); if($b.Length -ge 3 -and $b[0] -eq 239 -and $b[1] -eq 187 -and $b[2] -eq 191){ $t=$enc.GetString($b,3,$b.Length-3); [System.IO.File]::WriteAllText($p,$t,$enc); Write-Output ('STRIPPED ' + $n) } }"
+if errorlevel 1 (
+    echo   [WARN] could not normalise BOM in OpenCode config files
+    exit /b 1
+)
 exit /b 0
 
 rem ============================================================
-rem :install_ai_memory
-rem   Official ai-memory install: release binary via install.ps1,
-rem   then "setup --yes --agent opencode", which probes the host
-rem   and wires MCP, hooks and agent skills. Idempotent.
+rem :install_cache_stats
+rem   nmdra/opencode-cache-stats is not published to npm, so the
+rem   V2 plugin directory is copied verbatim into the global
+rem   plugins folder and enabled through cli.json.
 rem ============================================================
-:install_ai_memory
-setlocal DisableDelayedExpansion
-set "AIM="
-if exist "%LOCALAPPDATA%\Programs\ai-memory\ai-memory.exe" set "AIM=%LOCALAPPDATA%\Programs\ai-memory\ai-memory.exe"
-if not defined AIM for /f "delims=" %%i in ('where ai-memory 2^>nul') do if not defined AIM set "AIM=%%i"
+:install_cache_stats
+set "CS_SRC=%OC_DIR%\plugins\cache-stats"
+if exist "%CS_SRC%\stats.ts" (
+    echo   [SKIP] cache-stats already installed
+    set "SKIPPED=!SKIPPED! cache-stats"
+    goto :cs_enable
+)
 
-if defined AIM goto :aim_setup
+echo   [INSTALL] cache-stats
+if not exist "%OC_DIR%\plugins" mkdir "%OC_DIR%\plugins"
+curl -L -s --fail -o "%WORK%\cache-stats.zip" "https://github.com/nmdra/opencode-cache-stats/archive/refs/heads/main.zip"
+if errorlevel 1 (
+    echo   [ERROR] download failed for cache-stats
+    set "FAILED=!FAILED! cache-stats"
+    set "EXITCODE=1"
+    exit /b 1
+)
 
-echo   [INSTALL] ai-memory ^(release binary^)
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/akitaonrails/ai-memory/releases/latest/download/install.ps1 | iex"
-if errorlevel 1 goto :aim_fail
-set "AIM=%LOCALAPPDATA%\Programs\ai-memory\ai-memory.exe"
-if not exist "%AIM%" goto :aim_fail
+powershell -NoProfile -Command "Expand-Archive -LiteralPath '%WORK%\cache-stats.zip' -DestinationPath '%WORK%\cache-stats' -Force"
+if errorlevel 1 (
+    echo   [ERROR] extract failed for cache-stats
+    set "FAILED=!FAILED! cache-stats"
+    set "EXITCODE=1"
+    exit /b 1
+)
 
-:aim_setup
-echo   [SETUP] ai-memory setup --yes --agent opencode
-call "%AIM%" setup --yes --agent opencode
-if errorlevel 1 goto :aim_fail
-echo   [OK] ai-memory ^(MCP server, hooks, skills^)
-endlocal & exit /b 0
+set "CS_ROOT="
+for /d %%d in ("%WORK%\cache-stats\*") do set "CS_ROOT=%%d"
+if not exist "%CS_ROOT%\plugins\cache-stats\stats.ts" (
+    echo   [ERROR] cache-stats plugin directory not found in archive
+    set "FAILED=!FAILED! cache-stats"
+    set "EXITCODE=1"
+    exit /b 1
+)
 
-:aim_fail
-echo   [ERROR] ai-memory install/setup failed - see problem: lines above
-endlocal & set "EXITCODE=1" & exit /b 1
+robocopy "%CS_ROOT%\plugins\cache-stats" "%CS_SRC%" /E /NFL /NDL /NJH /NJS >nul
+if errorlevel 8 (
+    echo   [ERROR] copy failed for cache-stats
+    set "FAILED=!FAILED! cache-stats"
+    set "EXITCODE=1"
+    exit /b 1
+)
+echo   [OK] cache-stats
+set "INSTALLED=!INSTALLED! cache-stats"
+
+:cs_enable
+powershell -NoProfile -Command "$p=Join-Path '%OC_DIR%' 'cli.json'; $spec='./plugins/cache-stats'; if(Test-Path -LiteralPath $p){ $c=Get-Content -LiteralPath $p -Raw | ConvertFrom-Json } else { $c=[pscustomobject]@{ '$schema'='https://opencode.ai/v2/cli.json' } }; if(-not $c.PSObject.Properties['plugins']){ $c | Add-Member -NotePropertyName plugins -NotePropertyValue @() -Force }; $list=@($c.plugins | ForEach-Object { if($_.package){ $_.package } else { $_ } }); if($list -notcontains $spec){ $c.plugins=@($c.plugins) + $spec; $enc=New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($p,($c | ConvertTo-Json -Depth 20),$enc); Write-Output 'ADDED' } else { Write-Output 'SKIP' } }"
+if errorlevel 1 (
+    echo   [WARN] could not enable cache-stats in cli.json
+    set "EXITCODE=1"
+)
+exit /b 0
 
 rem ============================================================
 rem :plugin_add  "spec"
@@ -394,7 +384,7 @@ if not errorlevel 1 (
     )
 )
 rem fallback: ensure in opencode.json
-powershell -NoProfile -Command "$spec='%PSPEC%'; $dir='%OC_DIR%'; $files=@((Join-Path $dir 'opencode.json'),(Join-Path $dir 'opencode.jsonc')); foreach($f in $files){ if((Test-Path -LiteralPath $f) -and ((Get-Content -LiteralPath $f -Raw) -match [regex]::Escape($spec))){ Write-Output 'SKIP'; exit 0 } }; $p=Join-Path $dir 'opencode.json'; if(Test-Path -LiteralPath $p){ try { $raw=Get-Content -LiteralPath $p -Raw; $c=$raw | ConvertFrom-Json } catch { $c=[pscustomobject]@{ '$schema'='https://opencode.ai/config.json' } } } else { $c=[pscustomobject]@{ '$schema'='https://opencode.ai/config.json' } }; if(-not $c.PSObject.Properties['plugins']){ $c | Add-Member -NotePropertyName plugins -NotePropertyValue @() -Force }; $list=@($c.plugins); if($list -notcontains $spec){ $list += $spec }; $c.plugins=$list; $c | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $p -Encoding UTF8; Write-Output 'ADDED'"
+powershell -NoProfile -Command "$spec='%PSPEC%'; $dir='%OC_DIR%'; $files=@((Join-Path $dir 'opencode.json'),(Join-Path $dir 'opencode.jsonc')); foreach($f in $files){ if((Test-Path -LiteralPath $f) -and ((Get-Content -LiteralPath $f -Raw) -match [regex]::Escape($spec))){ Write-Output 'SKIP'; exit 0 } }; $p=Join-Path $dir 'opencode.json'; if(Test-Path -LiteralPath $p){ try { $raw=Get-Content -LiteralPath $p -Raw; $c=$raw | ConvertFrom-Json } catch { $c=[pscustomobject]@{ '$schema'='https://opencode.ai/config.json' } } } else { $c=[pscustomobject]@{ '$schema'='https://opencode.ai/config.json' } }; if(-not $c.PSObject.Properties['plugins']){ $c | Add-Member -NotePropertyName plugins -NotePropertyValue @() -Force }; $list=@($c.plugins); if($list -notcontains $spec){ $list += $spec }; $c.plugins=$list; $enc=New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($p,($c | ConvertTo-Json -Depth 20),$enc); Write-Output 'ADDED'"
 if errorlevel 1 (
     echo   [WARN] could not register plugin %PSPEC% in opencode.json
     set "EXITCODE=1"
@@ -410,7 +400,7 @@ rem   global config file. The CLI cannot register local paths, so
 rem   opencode.json is edited only if neither config has it yet.
 rem ============================================================
 :ensure_superpowers_plugin
-powershell -NoProfile -Command "$spec='~/.config/opencode/node_modules/superpowers'; $dir='%OC_DIR%'; $files=@((Join-Path $dir 'opencode.json'),(Join-Path $dir 'opencode.jsonc')); foreach($f in $files){ if((Test-Path -LiteralPath $f) -and ((Get-Content -LiteralPath $f -Raw) -match [regex]::Escape($spec))){ Write-Output 'SKIP'; exit 0 } }; $p=Join-Path $dir 'opencode.json'; if(Test-Path -LiteralPath $p){ $c=Get-Content -LiteralPath $p -Raw | ConvertFrom-Json } else { $c=[pscustomobject]@{ '$schema'='https://opencode.ai/config.json' } }; if(-not $c.PSObject.Properties['plugins']){ $c | Add-Member -NotePropertyName plugins -NotePropertyValue @() -Force }; $list=@($c.plugins); if($list -notcontains $spec){ $list += $spec }; $c.plugins=$list; $c | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $p -Encoding UTF8; Write-Output 'ADDED'"
+powershell -NoProfile -Command "$spec='~/.config/opencode/node_modules/superpowers'; $dir='%OC_DIR%'; $p=Join-Path $dir 'opencode.json'; $files=@($p,(Join-Path $dir 'opencode.jsonc')); $found=$false; foreach($f in $files){ if((Test-Path -LiteralPath $f) -and ((Get-Content -LiteralPath $f -Raw) -match [regex]::Escape($spec))){ $found=$true } }; if($found){ Write-Output 'SKIP'; exit 0 }; if(Test-Path -LiteralPath $p){ $c=Get-Content -LiteralPath $p -Raw | ConvertFrom-Json } else { $c=[pscustomobject]@{ '$schema'='https://opencode.ai/config.json' } }; if(-not $c.PSObject.Properties['plugins']){ $c | Add-Member -NotePropertyName plugins -NotePropertyValue @() -Force }; $list=@($c.plugins); if($list -notcontains $spec){ $list += $spec }; $c.plugins=$list; $enc=New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($p,($c | ConvertTo-Json -Depth 20),$enc); Write-Output 'ADDED'"
 if errorlevel 1 (
     echo   [WARN] could not register superpowers plugin entry
     set "EXITCODE=1"
